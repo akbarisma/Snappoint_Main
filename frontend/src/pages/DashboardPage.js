@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { dashboardAPI, stokAPI, investorAPI } from '@/services/api';
+import { dashboardAPI, stokAPI, investorAPI, notificationsAPI } from '@/services/api';
 import { formatCurrency, MONTHS } from '@/utils/helpers';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, TrendingDown, Package, Users, Wallet, BarChart3 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Package, Users, Wallet, BarChart3, AlertTriangle, AlertCircle, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const DashboardPage = () => {
   const [rekap, setRekap] = useState([]);
   const [sisaStok, setSisaStok] = useState(0);
   const [investors, setInvestors] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchData();
@@ -16,18 +19,29 @@ const DashboardPage = () => {
 
   const fetchData = async () => {
     try {
-      const [rekapRes, stokRes, investorRes] = await Promise.all([
+      const [rekapRes, stokRes, investorRes, notifRes] = await Promise.all([
         dashboardAPI.getRekap(),
         stokAPI.getSisa(),
-        investorAPI.getAll()
+        investorAPI.getAll(),
+        notificationsAPI.getAll()
       ]);
       setRekap(rekapRes.data);
       setSisaStok(stokRes.data.sisa_stok);
       setInvestors(investorRes.data);
+      setNotifications(notifRes.data.notifications || []);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const dismissNotification = async (id) => {
+    try {
+      await notificationsAPI.dismiss(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch (error) {
+      console.error('Error dismissing notification:', error);
     }
   };
 
@@ -53,6 +67,61 @@ const DashboardPage = () => {
         <h1 className="font-heading text-3xl font-bold text-neutral-900">Dashboard</h1>
         <p className="text-neutral-500">Ringkasan keuangan bisnis Anda</p>
       </div>
+
+      {/* Alert Notifications */}
+      {notifications.filter(n => n.type === 'critical' || n.type === 'warning').length > 0 && (
+        <div className="space-y-3" data-testid="dashboard-alerts">
+          {notifications.filter(n => n.type === 'critical' || n.type === 'warning').map((notif) => (
+            <div 
+              key={notif.id}
+              className={`p-4 rounded-xl flex items-center justify-between ${
+                notif.type === 'critical' 
+                  ? 'bg-rose-50 border-2 border-rose-200' 
+                  : 'bg-yellow-50 border-2 border-yellow-200'
+              }`}
+              data-testid={`alert-${notif.id}`}
+            >
+              <div className="flex items-center gap-3">
+                {notif.type === 'critical' ? (
+                  <AlertTriangle className="w-6 h-6 text-rose-500 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="w-6 h-6 text-yellow-600 flex-shrink-0" />
+                )}
+                <div>
+                  <p className={`font-semibold ${notif.type === 'critical' ? 'text-rose-700' : 'text-yellow-800'}`}>
+                    {notif.title}
+                  </p>
+                  <p className={`text-sm ${notif.type === 'critical' ? 'text-rose-600' : 'text-yellow-700'}`}>
+                    {notif.message}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {notif.action && (
+                  <button
+                    onClick={() => navigate(notif.action)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium ${
+                      notif.type === 'critical' 
+                        ? 'bg-rose-500 text-white hover:bg-rose-600' 
+                        : 'bg-yellow-500 text-neutral-900 hover:bg-yellow-600'
+                    }`}
+                  >
+                    Lihat
+                  </button>
+                )}
+                <button
+                  onClick={() => dismissNotification(notif.id)}
+                  className={`p-1 rounded ${
+                    notif.type === 'critical' ? 'text-rose-400 hover:text-rose-600' : 'text-yellow-500 hover:text-yellow-700'
+                  }`}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -866,6 +866,155 @@ async def sync_ml_from_transactions(user: dict = Depends(require_role(["admin", 
     return {"message": f"Synced {added} new data points from transactions", "total_days": len(daily_sales)}
 
 # ================================
+# Notification System
+# ================================
+
+class NotificationSettings(BaseModel):
+    stok_kritis_threshold: int = 100
+    stok_warning_threshold: int = 300
+    enabled: bool = True
+
+@api_router.get("/notifications")
+async def get_notifications(user: dict = Depends(get_current_user)):
+    """Get all active notifications for the user"""
+    notifications = []
+    
+    # Check stock level
+    stocks = await db.log_kertas.find({}).to_list(10000)
+    total_masuk = sum(s.get("jumlah_lembar", 0) for s in stocks if s.get("jenis_pergerakan") == "MASUK")
+    total_keluar = sum(s.get("jumlah_lembar", 0) for s in stocks if s.get("jenis_pergerakan") in ["TERPAKAI", "RUSAK", "PENYESUAIAN"])
+    sisa_stok = total_masuk - total_keluar
+    
+    # Get notification settings
+    settings = await db.notification_settings.find_one({}) or {
+        "stok_kritis_threshold": 100,
+        "stok_warning_threshold": 300
+    }
+    
+    # Stock critical notification
+    if sisa_stok <= settings.get("stok_kritis_threshold", 100):
+        notifications.append({
+            "id": "stok_kritis",
+            "type": "critical",
+            "title": "Stok Kertas Kritis!",
+            "message": f"Sisa stok hanya {sisa_stok} lembar. Segera lakukan restock!",
+            "icon": "alert-triangle",
+            "color": "red",
+            "action": "/stok",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+    elif sisa_stok <= settings.get("stok_warning_threshold", 300):
+        notifications.append({
+            "id": "stok_warning",
+            "type": "warning",
+            "title": "Stok Kertas Menipis",
+            "message": f"Sisa stok tinggal {sisa_stok} lembar. Pertimbangkan untuk restock.",
+            "icon": "alert-circle",
+            "color": "yellow",
+            "action": "/stok",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+    
+    # Check for high prediction days (if user has access)
+    if user.get("role") in ["admin", "owner", "investor"]:
+        try:
+            # Get recent predictions
+            recent_pred = await db.prediction_history.find_one({}, sort=[("created_at", -1)])
+            if recent_pred and recent_pred.get("predictions"):
+                preds = recent_pred.get("predictions", [])[:7]
+                avg_pred = sum(p.get("prediksi", 0) for p in preds) / len(preds) if preds else 0
+                
+                # Check for high sales days
+                high_days = [p for p in preds if p.get("prediksi", 0) > avg_pred * 1.3]
+                if high_days:
+                    notifications.append({
+                        "id": "high_prediction",
+                        "type": "info",
+                        "title": "Prediksi Penjualan Tinggi",
+                        "message": f"{len(high_days)} hari ke depan diprediksi penjualan tinggi. Siapkan stok!",
+                        "icon": "trending-up",
+                        "color": "green",
+                        "action": "/prediksi",
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    })
+        except Exception:
+            pass
+    
+    # Check pending kas withdrawal (for owner/admin)
+    if user.get("role") in ["admin", "owner"]:
+        # Calculate available kas
+        rekap = await db.transaksi.find({}).to_list(10000)
+        total_laba = sum(t.get("nominal", 0) for t in rekap if t.get("jenis") == "PEMASUKAN") - \
+                     sum(t.get("nominal", 0) for t in rekap if t.get("jenis") == "PENGELUARAN")
+        
+        kas_records = await db.buku_kas.find({}).to_list(1000)
+        total_kas_keluar = sum(k.get("nominal", 0) for k in kas_records if k.get("tipe") == "KELUAR")
+        
+        # Estimate auto kas (3% default)
+        estimated_kas = total_laba * 0.03
+        available_kas = estimated_kas - total_kas_keluar
+        
+        if available_kas > 1000000:  # More than 1 million available
+            notifications.append({
+                "id": "kas_available",
+                "type": "info",
+                "title": "Saldo Kas Tersedia",
+                "message": f"Rp {available_kas:,.0f} tersedia untuk ditarik.",
+                "icon": "wallet",
+                "color": "blue",
+                "action": "/kas",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+    
+    return {
+        "notifications": notifications,
+        "count": len(notifications),
+        "has_critical": any(n.get("type") == "critical" for n in notifications)
+    }
+
+@api_router.get("/notifications/settings")
+async def get_notification_settings(user: dict = Depends(require_role(["admin", "owner"]))):
+    """Get notification settings"""
+    settings = await db.notification_settings.find_one({})
+    if not settings:
+        settings = {
+            "stok_kritis_threshold": 100,
+            "stok_warning_threshold": 300,
+            "enabled": True
+        }
+    else:
+        settings["id"] = str(settings["_id"])
+        settings.pop("_id", None)
+    return settings
+
+@api_router.post("/notifications/settings")
+async def update_notification_settings(data: NotificationSettings, user: dict = Depends(require_role(["admin", "owner"]))):
+    """Update notification settings"""
+    await db.notification_settings.update_one(
+        {},
+        {"$set": {
+            "stok_kritis_threshold": data.stok_kritis_threshold,
+            "stok_warning_threshold": data.stok_warning_threshold,
+            "enabled": data.enabled,
+            "updated_at": datetime.now(timezone.utc),
+            "updated_by": user["id"]
+        }},
+        upsert=True
+    )
+    return {"message": "Settings updated"}
+
+@api_router.post("/notifications/{notification_id}/dismiss")
+async def dismiss_notification(notification_id: str, user: dict = Depends(get_current_user)):
+    """Dismiss a notification for the current session"""
+    # Store dismissed notifications in user's session data
+    await db.dismissed_notifications.update_one(
+        {"user_id": user["id"], "notification_id": notification_id},
+        {"$set": {"dismissed_at": datetime.now(timezone.utc)}},
+        upsert=True
+    )
+    return {"message": "Notification dismissed"}
+
+# ================================
 # Health Check
 # ================================
 

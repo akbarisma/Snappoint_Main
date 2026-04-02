@@ -156,4 +156,12 @@ export const mlAPI = {
   syncFromTransactions: () => api.get('/ml/sync-from-transactions'),
 };
 
+// Notifications API
+export const notificationsAPI = {
+  getAll: () => api.get('/notifications'),
+  getSettings: () => api.get('/notifications/settings'),
+  updateSettings: (data) => api.post('/notifications/settings', data),
+  dismiss: (id) => api.post(`/notifications/${id}/dismiss`),
+};
+
 export default api;

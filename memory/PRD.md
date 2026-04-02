@@ -48,6 +48,13 @@ User memiliki file snappoint_app-main (backend PHP) dan ML_main (Model Machine L
 - [x] Sync ML training data from transactions
 - [x] Responsive design with mobile sidebar toggle
 - [x] Data-testid attributes for testing
+- [x] **Automatic Notifications System**:
+  - Stock critical alert (< 100 sheets)
+  - Stock warning alert (< 300 sheets)
+  - High prediction alert (when predicted sales > 130% average)
+  - Kas available notification (when > Rp 1,000,000 available)
+  - Notification bell with dropdown in header
+  - Dismissable alert banners on dashboard
 
 ## Database Collections (MongoDB)
 - `users` - User accounts with roles
@@ -60,12 +67,15 @@ User memiliki file snappoint_app-main (backend PHP) dan ML_main (Model Machine L
 - `prediction_history` - Saved predictions
 - `setting_kas` - Cash percentage settings
 - `login_attempts` - Brute force protection
+- `notification_settings` - Notification thresholds config
+- `dismissed_notifications` - User dismissed notifications
 
 ## Prioritized Backlog
 
 ### P0 (Critical) - DONE
 - ✅ Fix authentication (cookie → localStorage + Authorization header)
 - ✅ All CRUD operations working
+- ✅ Automatic notification system for low stock
 
 ### P1 (High Priority) - Future
 - [ ] Export reports to PDF/Excel
