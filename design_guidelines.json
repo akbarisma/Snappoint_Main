@@ -1,0 +1,91 @@
+{
+  "theme": "Modern Minimalist",
+  "archetype": "4 (Swiss & High-Contrast - Custom Yellow Base)",
+  "color_palette": {
+    "background_app": "bg-yellow-50 (#FFFBEB) - Soft pale yellow to fulfill the 70% yellow ratio while maintaining readability",
+    "background_sidebar": "bg-yellow-400 (#FACC15) - Bold brand yellow for structural identity",
+    "background_surface": "bg-white (#FFFFFF) - 20% white for all data cards and functional surfaces",
+    "primary": "bg-yellow-500 (#EAB308) - For primary actions on white surfaces",
+    "success": "bg-emerald-500 (#10B981) - 5% green for income, profits, and positive stock levels",
+    "danger": "bg-rose-500 (#F43F5E) - 5% red for expenses and low stock alerts",
+    "text_primary": "text-neutral-900 (#171717) - High contrast against yellow and white",
+    "text_secondary": "text-neutral-500 (#737373) - For subtitles and less important data",
+    "border": "border-yellow-200 (#FEF08A) - For separating content within the app"
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Outfit, sans-serif",
+      "weights": ["font-semibold", "font-bold"],
+      "sizes": {
+        "h1": "text-3xl md:text-4xl tracking-tight",
+        "h2": "text-2xl md:text-3xl tracking-tight",
+        "h3": "text-xl md:text-2xl",
+        "h4": "text-lg md:text-xl"
+      }
+    },
+    "body": {
+      "font_family": "Manrope, sans-serif",
+      "weights": ["font-normal", "font-medium"],
+      "sizes": {
+        "base": "text-base leading-relaxed",
+        "small": "text-sm",
+        "tiny_labels": "text-xs tracking-[0.1em] uppercase"
+      }
+    }
+  },
+  "layout_and_spacing": {
+    "dashboard_grid": "Control Room Grid (Dense, Scanable): grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+    "card_padding": "p-6",
+    "section_spacing": "py-8",
+    "border_radius": "rounded-xl for cards, rounded-md for inputs/buttons",
+    "shadows": "shadow-sm for cards to lift them off the pale yellow background"
+  },
+  "micro_themes": {
+    "sidebar": "Flat solid yellow-400 background, black text/icons. No gradients. Active item gets a white background or stark black background with yellow text.",
+    "cards": "Solid white background, 1px border-yellow-200. Clean, flat look.",
+    "buttons": "Primary: Solid black or bold yellow. Danger: Solid rose. Success: Solid emerald. Always add hover states (e.g., hover:opacity-90)."
+  },
+  "component_instructions": {
+    "charts": "Use Recharts. For the ML Prediction chart, use a LineChart with two lines: one solid for historical data, and one dashed for the LSTM predicted data. Use neutral-900 for history and emerald-500 for prediction.",
+    "tables": "Use Shadcn Table component. Left-align data, right-align numbers/currency. Ensure alternating row colors or subtle bottom borders (border-yellow-100) for readability.",
+    "forms": "Use Shadcn Form, Input, Select. Labels must be text-sm font-semibold text-neutral-900.",
+    "authentication": "Split screen layout: Left side full-height image (login_background), right side white form centered."
+  },
+  "motion_and_interaction": {
+    "hover_states": "Buttons must have hover states (translate-y-[-1px] or opacity change).",
+    "transitions": "Use transition-all duration-200 ease-in-out for buttons and links.",
+    "loading": "Use simple CSS spinners or skeleton loaders (bg-yellow-200 animate-pulse)."
+  },
+  "accessibility": {
+    "contrast": "Ensure text-neutral-900 is used over yellow-400 and yellow-50 backgrounds.",
+    "data_testid": "ALL interactive elements must include data-testid (e.g., data-testid='login-button', data-testid='sidebar-nav-investor')"
+  },
+  "media_assets": {
+    "login_background": {
+      "url": "https://images.pexels.com/photos/6423063/pexels-photo-6423063.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Minimalist bright yellow wall with shadow, perfect for login screen half-page background."
+    },
+    "logo_placeholder": {
+      "url": "https://images.pexels.com/photos/4965823/pexels-photo-4965823.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Abstract intersecting black and yellow paper strips, use as a brand visual or logo placeholder."
+    },
+    "printing_machine_accent": {
+      "url": "https://images.unsplash.com/photo-1581508512961-0e3b9524db40?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHwxfHxwcmludGluZyUyMHByZXNzJTIwbWFjaGluZSUyMG1vZGVybnxlbnwwfHx8fDE3NzUxMDEwODF8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Industrial machine aesthetic, can be used for empty states or dashboard banners."
+    }
+  },
+  "iconography": {
+    "library": "lucide-react",
+    "instructions": "Use consistent stroke-width (usually 2). Use Icons for sidebar navigation (e.g., LayoutDashboard, Receipt, Package, BookOpen, Users, TrendingUp)."
+  },
+  "instructions_to_main_agent": [
+    "Initialize standard React app with Tailwind CSS.",
+    "Install Google Fonts 'Outfit' and 'Manrope'.",
+    "Set up React Router for authentication and dashboard layout.",
+    "Build a persistent Sidebar navigation with Yellow (70% feel) background.",
+    "Create Dashboard home with Bento Grid for Summary, Stock, Cash, and ML Prediction.",
+    "Build CRUD pages (Tables + Modals/Forms) for Transaksi, Stok, Kas, Investor, and Akun.",
+    "Implement the LSTM Forecasting visualization using Recharts (Line chart with distinct styling for predictions).",
+    "Ensure the green (5%) and red (5%) colors are used strictly for financial positive/negative indicators and stock alerts."
+  ]
+}
