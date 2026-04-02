@@ -75,4 +75,13 @@ export const predictAPI = {
   getHistory: () => api.get('/predict/history'),
 };
 
+// ML Training Data API
+export const mlAPI = {
+  getTrainingData: () => api.get('/ml/training-data'),
+  addTrainingData: (data) => api.post('/ml/training-data', data),
+  bulkAddTrainingData: (data) => api.post('/ml/training-data/bulk', data),
+  deleteTrainingData: (id) => api.delete(`/ml/training-data/${id}`),
+  syncFromTransactions: () => api.get('/ml/sync-from-transactions'),
+};
+
 export default api;

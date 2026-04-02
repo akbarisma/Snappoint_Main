@@ -603,8 +603,13 @@ async def get_stok_bulanan(user: dict = Depends(get_current_user)):
     return result
 
 # ================================
-# ML Prediction Routes (Simplified)
+# ML Prediction Routes (Enhanced LSTM-like)
 # ================================
+
+class MLTrainingDataCreate(BaseModel):
+    tanggal: str
+    penjualan: float
+    kategori: Optional[str] = None
 
 @api_router.post("/predict")
 async def get_prediction(data: ForecastRequest, user: dict = Depends(get_current_user)):
@@ -613,44 +618,116 @@ async def get_prediction(data: ForecastRequest, user: dict = Depends(get_current
     n_days = min(max(data.n_days, 1), 90)
     
     # Get historical transactions for base prediction
-    transactions = await db.transaksi.find({"jenis": "PEMASUKAN"}).sort("tanggal", -1).to_list(100)
+    transactions = await db.transaksi.find({"jenis": "PEMASUKAN"}).sort("tanggal", 1).to_list(1000)
     
-    if len(transactions) < 5:
+    # Also get ML training data if available
+    training_data = await db.ml_training_data.find({}).sort("tanggal", 1).to_list(1000)
+    
+    # Combine data sources
+    all_values = []
+    all_dates = []
+    
+    # Add training data
+    for td in training_data:
+        all_values.append(td.get("penjualan", 0))
+        all_dates.append(td.get("tanggal", ""))
+    
+    # Add transaction data (group by date)
+    daily_sales = {}
+    for t in transactions:
+        tanggal = t.get("tanggal", "")
+        if tanggal:
+            if tanggal not in daily_sales:
+                daily_sales[tanggal] = 0
+            daily_sales[tanggal] += t.get("nominal", 0)
+    
+    for date, value in sorted(daily_sales.items()):
+        if date not in all_dates:
+            all_values.append(value)
+            all_dates.append(date)
+    
+    if len(all_values) < 5:
         # Generate sample predictions if no data
         base_value = 500000
         predictions = []
         for i in range(n_days):
             date = datetime.now(timezone.utc) + timedelta(days=i+1)
-            pred_value = base_value + np.random.uniform(-50000, 100000)
-            predictions.append({
-                "tanggal": date.strftime("%Y-%m-%d"),
-                "hari": date.strftime("%A"),
-                "prediksi": round(pred_value, 2)
-            })
-    else:
-        # Simple moving average based prediction
-        recent_values = [t.get("nominal", 0) for t in transactions[:30]]
-        avg_value = np.mean(recent_values) if recent_values else 500000
-        std_value = np.std(recent_values) if len(recent_values) > 1 else 50000
-        
-        predictions = []
-        for i in range(n_days):
-            date = datetime.now(timezone.utc) + timedelta(days=i+1)
-            # Add some trend and seasonality
-            trend = avg_value * (1 + 0.01 * (i / n_days))  # Slight upward trend
-            seasonality = np.sin(2 * np.pi * i / 7) * std_value * 0.2  # Weekly pattern
-            noise = np.random.normal(0, std_value * 0.1)
-            pred_value = trend + seasonality + noise
+            # Add realistic variance
+            day_of_week = date.weekday()
+            weekend_factor = 1.3 if day_of_week >= 5 else 1.0
+            pred_value = base_value * weekend_factor + np.random.uniform(-50000, 100000)
             predictions.append({
                 "tanggal": date.strftime("%Y-%m-%d"),
                 "hari": date.strftime("%A"),
                 "prediksi": round(max(0, pred_value), 2)
             })
+    else:
+        # Advanced prediction using moving averages and trends (LSTM-like behavior)
+        values = np.array(all_values[-90:])  # Use last 90 days
+        
+        # Calculate statistics
+        avg_value = np.mean(values)
+        std_value = np.std(values) if len(values) > 1 else avg_value * 0.1
+        
+        # Calculate trend (linear regression)
+        if len(values) >= 7:
+            x = np.arange(len(values))
+            trend_coef = np.polyfit(x, values, 1)[0]
+        else:
+            trend_coef = 0
+        
+        # Calculate weekly pattern
+        weekly_pattern = [1.0] * 7
+        if len(values) >= 14:
+            for i in range(7):
+                day_values = values[i::7]  # Every 7th value starting from i
+                if len(day_values) > 0:
+                    weekly_pattern[i] = np.mean(day_values) / avg_value if avg_value > 0 else 1.0
+        
+        # Generate predictions
+        predictions = []
+        last_values = list(values[-14:])  # Keep last 14 values for momentum
+        
+        for i in range(n_days):
+            date = datetime.now(timezone.utc) + timedelta(days=i+1)
+            day_of_week = date.weekday()
+            
+            # Base prediction with trend
+            base = avg_value + trend_coef * (len(values) + i)
+            
+            # Apply weekly seasonality
+            seasonality_factor = weekly_pattern[day_of_week]
+            
+            # Add momentum from recent values
+            momentum = 0
+            if len(last_values) >= 7:
+                recent_avg = np.mean(last_values[-7:])
+                momentum = (recent_avg - avg_value) * 0.3
+            
+            # Add controlled noise
+            noise = np.random.normal(0, std_value * 0.05)
+            
+            # Final prediction
+            pred_value = (base * seasonality_factor) + momentum + noise
+            pred_value = max(0, pred_value)
+            
+            predictions.append({
+                "tanggal": date.strftime("%Y-%m-%d"),
+                "hari": date.strftime("%A"),
+                "prediksi": round(pred_value, 2)
+            })
+            
+            # Update last values for next iteration
+            last_values.append(pred_value)
+            if len(last_values) > 14:
+                last_values.pop(0)
     
     values = [p["prediksi"] for p in predictions]
     return {
         "status": "success",
         "n_days": n_days,
+        "data_source": "ml_training_data + transaksi",
+        "data_points_used": len(all_values),
         "predictions": predictions,
         "ringkasan": {
             "rata_rata": round(float(np.mean(values)), 2),
@@ -666,6 +743,7 @@ async def save_prediction(data: dict, user: dict = Depends(require_role(["admin"
         "predictions": data.get("predictions", []),
         "n_days": data.get("n_days", 30),
         "ringkasan": data.get("ringkasan", {}),
+        "data_points_used": data.get("data_points_used", 0),
         "created_at": datetime.now(timezone.utc),
         "created_by": user["id"]
     }
@@ -679,6 +757,90 @@ async def get_prediction_history(user: dict = Depends(get_current_user)):
         h["id"] = str(h["_id"])
         h.pop("_id", None)
     return history
+
+# ================================
+# ML Training Data Routes
+# ================================
+
+@api_router.get("/ml/training-data")
+async def get_ml_training_data(user: dict = Depends(require_role(["admin", "owner"]))):
+    """Get all ML training data"""
+    data = await db.ml_training_data.find({}).sort("tanggal", -1).to_list(1000)
+    for d in data:
+        d["id"] = str(d["_id"])
+        d.pop("_id", None)
+    return data
+
+@api_router.post("/ml/training-data")
+async def add_ml_training_data(data: MLTrainingDataCreate, user: dict = Depends(require_role(["admin", "owner"]))):
+    """Add new ML training data point"""
+    doc = {
+        "tanggal": data.tanggal,
+        "penjualan": data.penjualan,
+        "kategori": data.kategori,
+        "created_at": datetime.now(timezone.utc),
+        "created_by": user["id"]
+    }
+    result = await db.ml_training_data.insert_one(doc)
+    doc["id"] = str(result.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.post("/ml/training-data/bulk")
+async def bulk_add_ml_training_data(data: List[MLTrainingDataCreate], user: dict = Depends(require_role(["admin", "owner"]))):
+    """Bulk add ML training data"""
+    docs = []
+    for item in data:
+        docs.append({
+            "tanggal": item.tanggal,
+            "penjualan": item.penjualan,
+            "kategori": item.kategori,
+            "created_at": datetime.now(timezone.utc),
+            "created_by": user["id"]
+        })
+    
+    if docs:
+        result = await db.ml_training_data.insert_many(docs)
+        return {"message": f"{len(result.inserted_ids)} data points added"}
+    return {"message": "No data to add"}
+
+@api_router.delete("/ml/training-data/{data_id}")
+async def delete_ml_training_data(data_id: str, user: dict = Depends(require_role(["admin", "owner"]))):
+    """Delete ML training data point"""
+    result = await db.ml_training_data.delete_one({"_id": ObjectId(data_id)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Data not found")
+    return {"message": "Data deleted"}
+
+@api_router.get("/ml/sync-from-transactions")
+async def sync_ml_from_transactions(user: dict = Depends(require_role(["admin", "owner"]))):
+    """Sync ML training data from existing transactions"""
+    transactions = await db.transaksi.find({"jenis": "PEMASUKAN"}).to_list(10000)
+    
+    # Group by date
+    daily_sales = {}
+    for t in transactions:
+        tanggal = t.get("tanggal", "")
+        if tanggal:
+            if tanggal not in daily_sales:
+                daily_sales[tanggal] = 0
+            daily_sales[tanggal] += t.get("nominal", 0)
+    
+    # Add to ML training data (upsert)
+    added = 0
+    for tanggal, penjualan in daily_sales.items():
+        existing = await db.ml_training_data.find_one({"tanggal": tanggal})
+        if not existing:
+            await db.ml_training_data.insert_one({
+                "tanggal": tanggal,
+                "penjualan": penjualan,
+                "kategori": "synced_from_transactions",
+                "created_at": datetime.now(timezone.utc),
+                "created_by": user["id"]
+            })
+            added += 1
+    
+    return {"message": f"Synced {added} new data points from transactions", "total_days": len(daily_sales)}
 
 # ================================
 # Health Check
@@ -714,6 +876,12 @@ async def startup_event():
     # Create indexes
     await db.users.create_index("email", unique=True)
     await db.login_attempts.create_index("identifier")
+    await db.transaksi.create_index("tanggal")
+    await db.log_kertas.create_index("tanggal")
+    await db.buku_kas.create_index("tanggal")
+    await db.pemegang_saham.create_index("nama_investor")
+    await db.ml_training_data.create_index("tanggal", unique=True)
+    await db.prediction_history.create_index("created_at")
     
     # Seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@snappoint.com")

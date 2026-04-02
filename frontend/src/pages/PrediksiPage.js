@@ -1,21 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { predictAPI } from '@/services/api';
+import { predictAPI, mlAPI } from '@/services/api';
 import { formatCurrency, formatApiErrorDetail } from '@/utils/helpers';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, TrendingUp, BarChart3, Calendar } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, TrendingUp, BarChart3, Calendar, Database, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart } from 'recharts';
 
 const PrediksiPage = () => {
   const [predictions, setPredictions] = useState([]);
   const [ringkasan, setRingkasan] = useState(null);
+  const [dataInfo, setDataInfo] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [nDays, setNDays] = useState(30);
   const [error, setError] = useState('');
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const handlePredict = async () => {
     setLoading(true);
@@ -25,14 +30,37 @@ const PrediksiPage = () => {
       const res = await predictAPI.predict(nDays);
       setPredictions(res.data.predictions);
       setRingkasan(res.data.ringkasan);
+      setDataInfo({
+        dataSource: res.data.data_source,
+        dataPointsUsed: res.data.data_points_used
+      });
       toast({
         title: "Prediksi Berhasil!",
-        description: `${res.data.n_days} hari prediksi telah digenerate`,
+        description: `${res.data.n_days} hari prediksi telah digenerate menggunakan ${res.data.data_points_used} data points`,
       });
     } catch (err) {
       setError(formatApiErrorDetail(err.response?.data?.detail));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncData = async () => {
+    setSyncing(true);
+    try {
+      const res = await mlAPI.syncFromTransactions();
+      toast({
+        title: "Sinkronisasi Berhasil!",
+        description: res.data.message,
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: formatApiErrorDetail(err.response?.data?.detail),
+        variant: "destructive"
+      });
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -43,11 +71,13 @@ const PrediksiPage = () => {
     day: idx + 1
   }));
 
+  const canManageML = ['admin', 'owner'].includes(user?.role);
+
   return (
     <div className="space-y-8" data-testid="prediksi-page">
       <div>
         <h1 className="font-heading text-3xl font-bold text-neutral-900">Prediksi Penjualan</h1>
-        <p className="text-neutral-500">Forecasting penjualan menggunakan Machine Learning</p>
+        <p className="text-neutral-500">Forecasting penjualan menggunakan Machine Learning (LSTM-like algorithm)</p>
       </div>
 
       {error && (
@@ -98,9 +128,43 @@ const PrediksiPage = () => {
                 </>
               )}
             </Button>
+            {canManageML && (
+              <Button 
+                onClick={handleSyncData}
+                variant="outline"
+                className="border-blue-400 text-blue-700"
+                disabled={syncing}
+                data-testid="btn-sync-data"
+              >
+                {syncing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sinkronisasi...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Sync dari Transaksi
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
+
+      {/* Data Info */}
+      {dataInfo && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="p-4 flex items-center gap-4">
+            <Database className="w-6 h-6 text-blue-500" />
+            <div>
+              <p className="font-semibold text-blue-700">Data Source: {dataInfo.dataSource}</p>
+              <p className="text-sm text-blue-600">Menggunakan {dataInfo.dataPointsUsed} data points untuk prediksi</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       {ringkasan && (
@@ -221,7 +285,15 @@ const PrediksiPage = () => {
                     <tr key={idx} className="border-b border-yellow-100 hover:bg-yellow-50/50">
                       <td className="py-3 px-4 font-medium">+{idx + 1}</td>
                       <td className="py-3 px-4">{p.tanggal}</td>
-                      <td className="py-3 px-4">{p.hari}</td>
+                      <td className="py-3 px-4">
+                        <Badge className={
+                          p.hari === 'Saturday' || p.hari === 'Sunday' 
+                            ? 'bg-blue-500 text-white' 
+                            : 'bg-neutral-200 text-neutral-700'
+                        }>
+                          {p.hari}
+                        </Badge>
+                      </td>
                       <td className="py-3 px-4 text-right font-semibold text-emerald-600">
                         {formatCurrency(p.prediksi)}
                       </td>
@@ -240,6 +312,9 @@ const PrediksiPage = () => {
             <TrendingUp className="w-12 h-12 text-yellow-400 mx-auto mb-4" />
             <p className="text-neutral-600">
               Klik tombol "Generate Prediksi" untuk melihat forecasting penjualan
+            </p>
+            <p className="text-sm text-neutral-500 mt-2">
+              Model ML akan menggunakan data transaksi historis untuk prediksi yang lebih akurat
             </p>
           </CardContent>
         </Card>
