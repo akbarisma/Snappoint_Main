@@ -20,10 +20,22 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const checkAuth = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      setUser(false);
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await authAPI.me();
       setUser(response.data);
+      localStorage.setItem('user', JSON.stringify(response.data));
     } catch (error) {
+      // Token invalid, clear storage
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
       setUser(false);
     } finally {
       setLoading(false);
@@ -32,14 +44,28 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const response = await authAPI.login(email, password);
-    setUser(response.data);
-    return response.data;
+    const userData = {
+      id: response.data.id,
+      email: response.data.email,
+      name: response.data.name,
+      role: response.data.role
+    };
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+    return userData;
   };
 
   const register = async (data) => {
     const response = await authAPI.register(data);
-    setUser(response.data);
-    return response.data;
+    const userData = {
+      id: response.data.id,
+      email: response.data.email,
+      name: response.data.name,
+      role: response.data.role
+    };
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+    return userData;
   };
 
   const logout = async () => {
