@@ -13,8 +13,11 @@ User memiliki file snappoint_app-main (backend PHP) dan ML_main (Model Machine L
 ## Architecture
 ```
 /app/
-├── backend/           # FastAPI Python backend
-│   └── server.py      # Main API server (800+ lines)
+├── backend/           # FastAPI Python backend (SQLAlchemy + MySQL/SQLite)
+│   ├── server.py      # Main API server (900+ lines)
+│   ├── requirements.txt
+│   ├── .env           # Database & JWT config
+│   └── snappoint.db   # SQLite database (development)
 ├── frontend/          # React.js frontend
 │   └── src/
 │       ├── contexts/  # Auth context
@@ -23,8 +26,14 @@ User memiliki file snappoint_app-main (backend PHP) dan ML_main (Model Machine L
 │       ├── services/  # API services
 │       └── utils/     # Helper functions
 ├── ML_extracted/      # Original ML model files (reference)
-└── snappoint_extracted/ # Original PHP files (reference)
+├── snappoint_extracted/ # Original PHP files (reference)
+└── README.md          # Installation guide
 ```
+
+## Database (MySQL/SQLite)
+Menggunakan SQLAlchemy ORM dengan dukungan:
+- **SQLite** (Development) - `sqlite+aiosqlite:///./snappoint.db`
+- **MySQL** (Production) - `mysql+aiomysql://user:pass@host:port/db`
 
 ## Core Requirements (Static)
 1. ✅ JWT Authentication (login, register, logout, refresh token)
@@ -40,11 +49,12 @@ User memiliki file snappoint_app-main (backend PHP) dan ML_main (Model Machine L
 
 ## What's Been Implemented (January 2026)
 - [x] FastAPI backend with all CRUD endpoints
-- [x] MongoDB integration with proper indexes
+- [x] **SQLAlchemy ORM** with MySQL/SQLite support (migrated from MongoDB)
 - [x] JWT authentication with localStorage token storage
 - [x] React.js frontend with yellow theme (70% yellow, 20% white, 5% green, 5% red)
 - [x] All 8 pages: Dashboard, Transaksi, Stok, Laporan, Kas, Investor, Prediksi, Akun
 - [x] ML prediction using historical transaction data
+- [x] **Prediction History** - Tab untuk melihat dan load prediksi sebelumnya
 - [x] Sync ML training data from transactions
 - [x] Responsive design with mobile sidebar toggle
 - [x] Data-testid attributes for testing
@@ -56,17 +66,17 @@ User memiliki file snappoint_app-main (backend PHP) dan ML_main (Model Machine L
   - Notification bell with dropdown in header
   - Dismissable alert banners on dashboard
 
-## Database Collections (MongoDB)
+## Database Tables (MySQL/SQLite)
 - `users` - User accounts with roles
+- `login_attempts` - Brute force protection
+- `kategori_transaksi` - Transaction categories
 - `transaksi` - Financial transactions
 - `log_kertas` - Paper stock movements
 - `buku_kas` - Cash book entries
-- `pemegang_saham` - Investor/shareholder data
-- `kategori_transaksi` - Transaction categories
-- `ml_training_data` - ML training data points
-- `prediction_history` - Saved predictions
 - `setting_kas` - Cash percentage settings
-- `login_attempts` - Brute force protection
+- `pemegang_saham` - Investor/shareholder data
+- `ml_training_data` - ML training data points
+- `prediction_history` - Saved predictions with JSON data
 - `notification_settings` - Notification thresholds config
 - `dismissed_notifications` - User dismissed notifications
 
